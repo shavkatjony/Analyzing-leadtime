@@ -1,2 +1,419 @@
 # Analyzing-leadtime
 this website analyzes the  Lead Time and the Bullwhip Effect based on tsp data 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced Data Analysis Dashboard</title>
+  <!-- Basic styling for a modern look -->
+  <style>
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f7fa; 
+      margin: 20px; 
+      color: #333;
+    }
+    h1, h2, h3 { color: #2c3e50; }
+    .section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .buttonGroup button { margin: 5px 10px 5px 0; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+    .buttonGroup button:hover { opacity: 0.9; }
+    button.primary { background: #3498db; color: #fff; }
+    button.secondary { background: #2ecc71; color: #fff; }
+    button.danger { background: #e74c3c; color: #fff; }
+    button.info { background: #9b59b6; color: #fff; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background: #2c3e50; color: #fff; }
+    #chartArea { width: 100%; height: 450px; }
+    .explanation { background: #ecf0f1; border-left: 4px solid #3498db; padding: 10px; margin-top: 10px; border-radius: 4px; }
+    .toggleView { margin-top: 10px; }
+  </style>
+  <!-- Libraries -->
+  <!-- Papa Parse for CSV -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <!-- SheetJS for Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Plotly for charts -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- simple-statistics for stats -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-statistics/7.8.0/simple-statistics.min.js"></script>
+  <!-- jsPDF for PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h1>Advanced Data Analysis Dashboard</h1>
+
+  <!-- File Upload Section -->
+  <div class="section" id="uploadSection">
+    <h2>Upload CSV or Excel File</h2>
+    <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
+    <button id="downloadOriginal" class="secondary hidden">Download Original File</button>
+  </div>
+
+  <!-- Data Table Section -->
+  <div class="section hidden" id="dataSection">
+    <h2>Dataset Preview</h2>
+    <div class="toggleView">
+      <button id="previewBtn" class="primary">Preview (5 Rows)</button>
+      <button id="fullBtn" class="primary">Full Dataset</button>
+    </div>
+    <div id="dataDisplay"></div>
+  </div>
+
+  <!-- Descriptive Statistics Section -->
+  <div class="section hidden" id="statsSection">
+    <h2>Descriptive Statistics</h2>
+    <div id="statsOutput"></div>
+    <div class="explanation">
+      <p><strong>Explanation:</strong> The above table displays the mean, median, standard deviation, and count for each numeric column, providing a summary of your dataset.</p>
+    </div>
+  </div>
+
+  <!-- Chart Section -->
+  <div class="section hidden" id="chartSection">
+    <h2>Data Visualization</h2>
+    <div class="buttonGroup">
+      <button id="histogramBtn" class="primary">Histogram</button>
+      <button id="barChartBtn" class="secondary">Bar Chart</button>
+      <button id="pieChartBtn" class="info">Pie Chart</button>
+      <button id="lineGraphBtn" class="danger">Line Graph</button>
+    </div>
+    <p>Select a numeric column for charting:</p>
+    <select id="chartColumnSelector"></select>
+    <div id="chartArea"></div>
+    <div id="chartExplanation" class="explanation"></div>
+  </div>
+
+  <!-- Correlation Matrix Section -->
+  <div class="section hidden" id="corrSection">
+    <h2>Correlation Matrix</h2>
+    <div id="corrOutput"></div>
+    <div class="explanation">
+      <p><strong>Explanation:</strong> This matrix shows the Pearson correlation coefficients between numeric columns. Values close to 1 or -1 indicate strong positive or negative linear relationships respectively.</p>
+    </div>
+  </div>
+
+  <!-- Hypothesis Testing Section -->
+  <div class="section" id="hypothesisSection">
+    <h2>Hypothesis Testing</h2>
+    <p>Perform a basic two‑sample t‑test. Enter two numeric column names:</p>
+    <input type="text" id="group1" placeholder="Group 1 column name">
+    <input type="text" id="group2" placeholder="Group 2 column name">
+    <button id="tTestButton" class="primary">Run t‑Test</button>
+    <div id="tTestOutput"></div>
+    <div class="explanation">
+      <p><strong>Explanation:</strong> The t‑test compares the means of two groups. In this demo, the t‑value is calculated assuming equal variances. For full p‑value calculation, more advanced functions would be needed.</p>
+    </div>
+  </div>
+
+  <!-- AI Analysis Section -->
+  <div class="section" id="aiSection">
+    <h2>AI Analysis</h2>
+    <p>Let the AI analyze your dataset and provide insights:</p>
+    <button id="askAIButton" class="primary">Ask AI</button>
+    <div id="aiOutput"></div>
+    <div class="explanation">
+      <p><strong>Explanation:</strong> In this demo, the AI function simulates an API call to generate insights. In a production system, you could integrate with a real AI service (e.g., Google Cloud AI) to provide advanced natural language insights.</p>
+    </div>
+  </div>
+
+  <!-- PDF Report Section -->
+  <div class="section" id="reportSection">
+    <h2>Download Report</h2>
+    <button id="downloadPDF" class="secondary">Download PDF Report</button>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    let originalFile = null;
+    let data = [];       // Array of objects from the file
+    let headers = [];    // Column headers
+
+    // Handle file upload and parsing
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      originalFile = file;
+      document.getElementById('downloadOriginal').classList.remove('hidden');
+      const fileName = file.name.toLowerCase();
+
+      if(fileName.endsWith('.csv')){
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const csvData = event.target.result;
+          Papa.parse(csvData, {
+            header: true,
+            dynamicTyping: true,
+            complete: function(results) {
+              data = results.data;
+              headers = results.meta.fields;
+              postFileProcessing();
+            }
+          });
+        }
+        reader.readAsText(file);
+      } else if(fileName.endsWith('.xlsx') || fileName.endsWith('.xls')){
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataBinary = e.target.result;
+          const workbook = XLSX.read(dataBinary, {type:'binary'});
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          data = XLSX.utils.sheet_to_json(worksheet, {defval:""});
+          headers = data.length ? Object.keys(data[0]) : [];
+          postFileProcessing();
+        }
+        reader.readAsBinaryString(file);
+      }
+    });
+
+    // Post-processing after file load
+    function postFileProcessing() {
+      renderData("preview");
+      renderStats();
+      populateChartSelector();
+      renderCorrelationMatrix();
+      showSections();
+    }
+
+    function showSections() {
+      document.getElementById('dataSection').classList.remove('hidden');
+      document.getElementById('statsSection').classList.remove('hidden');
+      document.getElementById('chartSection').classList.remove('hidden');
+      document.getElementById('corrSection').classList.remove('hidden');
+    }
+
+    // Render dataset (either preview or full)
+    function renderData(mode = "preview") {
+      let displayDiv = document.getElementById('dataDisplay');
+      let tableHTML = "<table><thead><tr>";
+      headers.forEach(h => tableHTML += `<th>${h}</th>`);
+      tableHTML += "</tr></thead><tbody>";
+
+      let rows = (mode === "preview") ? data.slice(0,5) : data;
+      rows.forEach(row => {
+        tableHTML += "<tr>";
+        headers.forEach(h => tableHTML += `<td>${row[h]}</td>`);
+        tableHTML += "</tr>";
+      });
+      tableHTML += "</tbody></table>";
+      displayDiv.innerHTML = tableHTML;
+    }
+
+    // Toggle dataset view
+    document.getElementById('previewBtn').addEventListener('click', () => renderData("preview"));
+    document.getElementById('fullBtn').addEventListener('click', () => renderData("full"));
+
+    // Render descriptive statistics for numeric columns
+    function renderStats() {
+      const statsDiv = document.getElementById('statsOutput');
+      let statsHTML = "<table><thead><tr><th>Column</th><th>Count</th><th>Mean</th><th>Median</th><th>Std Dev</th></tr></thead><tbody>";
+      headers.forEach(col => {
+        let colData = data.map(d => d[col]).filter(v => typeof v === "number");
+        if(colData.length > 0) {
+          statsHTML += `<tr>
+                          <td>${col}</td>
+                          <td>${colData.length}</td>
+                          <td>${ss.mean(colData).toFixed(3)}</td>
+                          <td>${ss.median(colData).toFixed(3)}</td>
+                          <td>${ss.standardDeviation(colData).toFixed(3)}</td>
+                        </tr>`;
+        }
+      });
+      statsHTML += "</tbody></table>";
+      statsDiv.innerHTML = statsHTML;
+    }
+
+    // Populate the chart column selector with numeric columns
+    function populateChartSelector() {
+      const selector = document.getElementById('chartColumnSelector');
+      selector.innerHTML = "";
+      headers.forEach(col => {
+        let colData = data.map(d => d[col]).filter(v => typeof v === "number");
+        if(colData.length > 0) {
+          let opt = document.createElement("option");
+          opt.value = col;
+          opt.innerText = col;
+          selector.appendChild(opt);
+        }
+      });
+    }
+
+    // Chart plotting functions
+    function plotHistogram(column) {
+      let colData = data.map(d => d[column]).filter(v => typeof v === "number");
+      const trace = { x: colData, type: 'histogram', marker: { color: '#3498db' } };
+      const layout = { title: 'Histogram of ' + column, xaxis: { title: column }, yaxis: { title: 'Frequency' } };
+      Plotly.newPlot('chartArea', [trace], layout);
+      document.getElementById('chartExplanation').innerHTML = `<p><strong>Histogram Explanation:</strong> A histogram displays the distribution of numeric data by grouping values into bins. It shows frequency of values within each bin.</p>`;
+    }
+
+    function plotBarChart(column) {
+      let colData = data.map(d => d[column]).filter(v => typeof v === "number");
+      // Create bins for the bar chart
+      let bins = ss.histogram(colData);
+      const trace = {
+        x: bins.map((b, i) => `Bin ${i+1}`),
+        y: bins,
+        type: 'bar',
+        marker: { color: '#2ecc71' }
+      };
+      const layout = { title: 'Bar Chart of Binned ' + column, xaxis: { title: 'Bins' }, yaxis: { title: 'Count' } };
+      Plotly.newPlot('chartArea', [trace], layout);
+      document.getElementById('chartExplanation').innerHTML = `<p><strong>Bar Chart Explanation:</strong> A bar chart represents the frequency of data points within specified ranges (bins). It is similar to a histogram but with discrete bars.</p>`;
+    }
+
+    function plotPieChart(column) {
+      // For a pie chart, we consider categorical counts.
+      // If the column is numeric, we convert values to strings.
+      let colData = data.map(d => d[column]).map(v => v.toString());
+      let counts = {};
+      colData.forEach(val => { counts[val] = (counts[val] || 0) + 1; });
+      const trace = {
+        labels: Object.keys(counts),
+        values: Object.values(counts),
+        type: 'pie'
+      };
+      const layout = { title: 'Pie Chart for ' + column };
+      Plotly.newPlot('chartArea', [trace], layout);
+      document.getElementById('chartExplanation').innerHTML = `<p><strong>Pie Chart Explanation:</strong> A pie chart shows the proportional distribution of categories within a column. Each slice represents a category’s share of the total.</p>`;
+    }
+
+    function plotLineGraph(column) {
+      let colData = data.map(d => d[column]).filter(v => typeof v === "number");
+      // Use index as x-axis (or if there is a date/time column, that could be used instead)
+      const trace = { x: Array.from({length: colData.length}, (_, i) => i+1), y: colData, type: 'scatter', mode: 'lines+markers', line: { color: '#e74c3c' } };
+      const layout = { title: 'Line Graph of ' + column, xaxis: { title: 'Index' }, yaxis: { title: column } };
+      Plotly.newPlot('chartArea', [trace], layout);
+      document.getElementById('chartExplanation').innerHTML = `<p><strong>Line Graph Explanation:</strong> A line graph connects data points with a continuous line. It is ideal for showing trends over a sequence (such as time or order of entries).</p>`;
+    }
+
+    // Event listeners for chart buttons
+    document.getElementById('histogramBtn').addEventListener('click', function() {
+      const col = document.getElementById('chartColumnSelector').value;
+      plotHistogram(col);
+    });
+    document.getElementById('barChartBtn').addEventListener('click', function() {
+      const col = document.getElementById('chartColumnSelector').value;
+      plotBarChart(col);
+    });
+    document.getElementById('pieChartBtn').addEventListener('click', function() {
+      const col = document.getElementById('chartColumnSelector').value;
+      plotPieChart(col);
+    });
+    document.getElementById('lineGraphBtn').addEventListener('click', function() {
+      const col = document.getElementById('chartColumnSelector').value;
+      plotLineGraph(col);
+    });
+
+    // Basic two-sample t-test
+    document.getElementById('tTestButton').addEventListener('click', function() {
+      const col1 = document.getElementById('group1').value;
+      const col2 = document.getElementById('group2').value;
+      if(!col1 || !col2){
+        document.getElementById('tTestOutput').innerHTML = "<p>Please enter both column names.</p>";
+        return;
+      }
+      const sample1 = data.map(d => d[col1]).filter(v => typeof v === "number");
+      const sample2 = data.map(d => d[col2]).filter(v => typeof v === "number");
+      if(sample1.length === 0 || sample2.length === 0){
+        document.getElementById('tTestOutput').innerHTML = "<p>One or both columns do not contain numeric data.</p>";
+        return;
+      }
+      const mean1 = ss.mean(sample1);
+      const mean2 = ss.mean(sample2);
+      const sd1 = ss.standardDeviation(sample1);
+      const sd2 = ss.standardDeviation(sample2);
+      const n1 = sample1.length;
+      const n2 = sample2.length;
+      const pooledSD = Math.sqrt((((n1-1)*sd1*sd1) + ((n2-1)*sd2*sd2))/(n1+n2-2));
+      const tValue = (mean1 - mean2) / (pooledSD * Math.sqrt(1/n1 + 1/n2));
+      let resultHTML = `<p>t‑value: ${tValue.toFixed(3)}</p>`;
+      resultHTML += `<p><em>Note:</em> p‑value calculation is not implemented in this demo.</p>`;
+      document.getElementById('tTestOutput').innerHTML = resultHTML;
+    });
+
+    // Render correlation matrix (for numeric columns)
+    function renderCorrelationMatrix() {
+      let numericCols = headers.filter(col => data.map(d => d[col]).filter(v => typeof v === "number").length > 0);
+      if(numericCols.length < 2) {
+        document.getElementById('corrOutput').innerHTML = "<p>Not enough numeric columns for correlation analysis.</p>";
+        return;
+      }
+      let matrixHTML = "<table><thead><tr><th></th>";
+      numericCols.forEach(col => { matrixHTML += `<th>${col}</th>`; });
+      matrixHTML += "</tr></thead><tbody>";
+      numericCols.forEach(col1 => {
+        matrixHTML += `<tr><th>${col1}</th>`;
+        numericCols.forEach(col2 => {
+          let arr1 = data.map(d => d[col1]).filter(v => typeof v === "number");
+          let arr2 = data.map(d => d[col2]).filter(v => typeof v === "number");
+          let corr = ss.sampleCorrelation(arr1, arr2);
+          matrixHTML += `<td>${(corr || 0).toFixed(2)}</td>`;
+        });
+        matrixHTML += "</tr>";
+      });
+      matrixHTML += "</tbody></table>";
+      document.getElementById('corrOutput').innerHTML = matrixHTML;
+    }
+
+    // Simulated AI Analysis (replace with actual API integration as needed)
+    document.getElementById('askAIButton').addEventListener('click', async function() {
+      // For demonstration, simulate an API call with a delay.
+      document.getElementById('aiOutput').innerHTML = "<p>Analyzing data... please wait.</p>";
+      // In production, you could call an actual AI API (e.g., Google Cloud AI) here.
+      setTimeout(() => {
+        let insights = `<p><strong>AI Insights:</strong></p>`;
+        insights += `<p>The dataset contains ${data.length} records with ${headers.length} columns. </p>`;
+        headers.forEach(col => {
+          let colData = data.map(d => d[col]).filter(v => typeof v === "number");
+          if(colData.length > 0){
+            insights += `<p>For column <em>${col}</em>: Mean = ${ss.mean(colData).toFixed(3)}, Median = ${ss.median(colData).toFixed(3)}</p>`;
+          }
+        });
+        insights += `<p>Further analysis on logistics trends (e.g., delivery times, inventory levels) could be integrated here if the dataset contains such variables.</p>`;
+        document.getElementById('aiOutput').innerHTML = insights;
+      }, 2000);
+    });
+
+    // Download original file
+    document.getElementById('downloadOriginal').addEventListener('click', function() {
+      if(originalFile) {
+        const url = URL.createObjectURL(originalFile);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = originalFile.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    });
+
+    // Download PDF Report
+    document.getElementById('downloadPDF').addEventListener('click', function() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let yPos = 10;
+      doc.setFontSize(16);
+      doc.text("Data Analysis Report", 10, yPos);
+      yPos += 10;
+      
+      doc.setFontSize(12);
+      doc.text(`Total Rows: ${data.length}`, 10, yPos);
+      yPos += 10;
+      
+      headers.forEach(col => {
+        let colData = data.map(d => d[col]).filter(v => typeof v === "number");
+        if(colData.length > 0) {
+          doc.text(`${col} - Mean: ${ss.mean(colData).toFixed(3)}, Median: ${ss.median(colData).toFixed(3)}, SD: ${ss.standardDeviation(colData).toFixed(3)}`, 10, yPos);
+          yPos += 10;
+          if(yPos > 280) {
+            doc.addPage();
+            yPos = 10;
+          }
+        }
+      });
+      doc.save("Data_Analysis_Report.pdf");
+    });
+  </script>
+</body>
+</html>
